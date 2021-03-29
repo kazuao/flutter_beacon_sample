@@ -1,10 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_beacon/flutter_beacon.dart';
-
-import 'commons.dart';
 
 class BeaconReceive extends StatefulWidget {
   @override
@@ -13,8 +12,6 @@ class BeaconReceive extends StatefulWidget {
 
 class _BeaconReceiveState extends State<BeaconReceive>
     with WidgetsBindingObserver {
-  Commons common = Commons();
-
   final StreamController<BluetoothState> streamController = StreamController();
   StreamSubscription<BluetoothState> _streamBluetooth;
   StreamSubscription<RangingResult> _streamRanging;
@@ -27,7 +24,9 @@ class _BeaconReceiveState extends State<BeaconReceive>
   @override
   void initState() {
     WidgetsBinding.instance.addObserver(this);
+
     super.initState();
+
     listeningState();
   }
 
@@ -60,11 +59,7 @@ class _BeaconReceiveState extends State<BeaconReceive>
             authorizationStatus == AuthorizationStatus.always;
     final locationServiceEnabled =
         await flutterBeacon.checkLocationServicesIfEnabled;
-    print(bluetoothState);
-    print(bluetoothEnabled);
-    print(authorizationStatus);
-    print(authorizationStatusOk);
-    print(locationServiceEnabled);
+
     setState(() {
       this.authorizationStatusOk = authorizationStatusOk;
       this.locationServiceEnabled = locationServiceEnabled;
@@ -73,13 +68,8 @@ class _BeaconReceiveState extends State<BeaconReceive>
   }
 
   initScanBeacon() async {
-    try {
-      await flutterBeacon.initializeAndCheckScanning;
-      await checkAllRequirements();
-    } on PlatformException catch (e) {
-      print(e);
-    }
-
+    await flutterBeacon.initializeScanning;
+    await checkAllRequirements();
     if (!authorizationStatusOk ||
         !locationServiceEnabled ||
         !bluetoothEnabled) {
@@ -88,11 +78,11 @@ class _BeaconReceiveState extends State<BeaconReceive>
           'bluetoothEnabled=$bluetoothEnabled');
       return;
     }
-
-    String iosDeviceInfo = await common.getIosDeviceInfo();
-    print(iosDeviceInfo);
-    final regions = [
-      Region(identifier: 'Apple Airlocate', proximityUUID: iosDeviceInfo),
+    final regions = <Region>[
+      Region(
+        identifier: 'Apple Airlocate',
+        proximityUUID: 'E2C56DB5-DFFB-48D2-B060-D0F5A71096E0',
+      ),
     ];
 
     if (_streamRanging != null) {
@@ -112,7 +102,6 @@ class _BeaconReceiveState extends State<BeaconReceive>
           _regionBeacons.values.forEach((list) {
             _beacons.addAll(list);
           });
-
           _beacons.sort(_compareParameters);
         });
       }
@@ -149,7 +138,6 @@ class _BeaconReceiveState extends State<BeaconReceive>
       if (_streamBluetooth != null && _streamBluetooth.isPaused) {
         _streamBluetooth.resume();
       }
-
       await checkAllRequirements();
       if (authorizationStatusOk && locationServiceEnabled && bluetoothEnabled) {
         await initScanBeacon();
@@ -166,8 +154,8 @@ class _BeaconReceiveState extends State<BeaconReceive>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     streamController?.close();
-    _streamRanging.cancel();
-    _streamBluetooth.cancel();
+    _streamRanging?.cancel();
+    _streamBluetooth?.cancel();
     flutterBeacon.close;
 
     super.dispose();
@@ -175,86 +163,107 @@ class _BeaconReceiveState extends State<BeaconReceive>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Beacon Receive'),
-        centerTitle: false,
-        actions: [
-          if (!authorizationStatusOk)
-            IconButton(
-              icon: Icon(Icons.portable_wifi_off),
-              color: Colors.red,
-              onPressed: () async => await flutterBeacon.requestAuthorization,
-            ),
-          if (!locationServiceEnabled)
-            IconButton(
-              icon: Icon(Icons.location_off),
-              color: Colors.red,
-              onPressed: () {},
-            ),
-          StreamBuilder(
-            builder: (BuildContext context, AsyncSnapshot snapshot) {
-              if (snapshot.hasData) {
-                final state = snapshot.data;
-
-                if (state == BluetoothState.stateOn) {
-                  return IconButton(
-                    icon: Icon(Icons.bluetooth_connected),
-                    color: Colors.lightBlueAccent,
-                    onPressed: () async => {},
-                  );
-                }
-
-                if (state == BluetoothState.stateOff) {
-                  return IconButton(
-                    icon: Icon(Icons.bluetooth),
-                    color: Colors.red,
-                    onPressed: () async => {},
-                  );
-                }
-
-                return IconButton(
-                  icon: Icon(Icons.bluetooth_disabled),
-                  color: Colors.grey,
-                  onPressed: () async => {},
-                );
-              }
-              return SizedBox.shrink();
-            },
-            stream: streamController.stream,
-            initialData: BluetoothState.stateUnknown,
-          ),
-        ],
+    return MaterialApp(
+      theme: ThemeData(
+        brightness: Brightness.light,
+        primaryColor: Colors.white,
       ),
-      body: _beacons == null || _beacons.isEmpty
-          ? Center(child: CircularProgressIndicator())
-          : ListView(
-              children: ListTile.divideTiles(
-                context: context,
-                tiles: _beacons.map((beacon) {
-                  return ListTile(
-                    title: Text(beacon.proximityUUID),
-                    subtitle: new Row(
-                      mainAxisSize: MainAxisSize.max,
-                      children: <Widget>[
-                        Flexible(
-                            child: Text(
-                                'Major: ${beacon.major}\nMinor: ${beacon.minor}',
-                                style: TextStyle(fontSize: 13.0)),
-                            flex: 1,
-                            fit: FlexFit.tight),
-                        Flexible(
-                            child: Text(
-                                'Accuracy: ${beacon.accuracy}m\nRSSI: ${beacon.rssi}',
-                                style: TextStyle(fontSize: 13.0)),
-                            flex: 2,
-                            fit: FlexFit.tight)
-                      ],
-                    ),
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+      ),
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text('Flutter Beacon'),
+          centerTitle: false,
+          actions: <Widget>[
+            if (!authorizationStatusOk)
+              IconButton(
+                  icon: Icon(Icons.portable_wifi_off),
+                  color: Colors.red,
+                  onPressed: () async {
+                    await flutterBeacon.requestAuthorization;
+                  }),
+            if (!locationServiceEnabled)
+              IconButton(
+                  icon: Icon(Icons.location_off),
+                  color: Colors.red,
+                  onPressed: () async {
+                    if (Platform.isAndroid) {
+                      await flutterBeacon.openLocationSettings;
+                    } else if (Platform.isIOS) {}
+                  }),
+            StreamBuilder<BluetoothState>(
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  final state = snapshot.data;
+
+                  if (state == BluetoothState.stateOn) {
+                    return IconButton(
+                      icon: Icon(Icons.bluetooth_connected),
+                      onPressed: () {},
+                      color: Colors.lightBlueAccent,
+                    );
+                  }
+
+                  if (state == BluetoothState.stateOff) {
+                    return IconButton(
+                      icon: Icon(Icons.bluetooth),
+                      onPressed: () async {
+                        if (Platform.isAndroid) {
+                          try {
+                            await flutterBeacon.openBluetoothSettings;
+                          } on PlatformException catch (e) {
+                            print(e);
+                          }
+                        } else if (Platform.isIOS) {}
+                      },
+                      color: Colors.red,
+                    );
+                  }
+
+                  return IconButton(
+                    icon: Icon(Icons.bluetooth_disabled),
+                    onPressed: () {},
+                    color: Colors.grey,
                   );
-                }).toList(),
-              ),
+                }
+
+                return SizedBox.shrink();
+              },
+              stream: streamController.stream,
+              initialData: BluetoothState.stateUnknown,
             ),
+          ],
+        ),
+        body: _beacons == null || _beacons.isEmpty
+            ? Center(child: CircularProgressIndicator())
+            : ListView(
+                children: ListTile.divideTiles(
+                    context: context,
+                    tiles: _beacons.map((beacon) {
+                      return ListTile(
+                        title: Text(beacon.proximityUUID),
+                        subtitle: new Row(
+                          mainAxisSize: MainAxisSize.max,
+                          children: <Widget>[
+                            Flexible(
+                                child: Text(
+                                    'Major: ${beacon.major}\nMinor: ${beacon.minor}',
+                                    style: TextStyle(fontSize: 13.0)),
+                                flex: 1,
+                                fit: FlexFit.tight),
+                            Flexible(
+                                child: Text(
+                                    'Accuracy: ${beacon.accuracy}m\nRSSI: ${beacon.rssi}',
+                                    style: TextStyle(fontSize: 13.0)),
+                                flex: 2,
+                                fit: FlexFit.tight)
+                          ],
+                        ),
+                      );
+                    })).toList(),
+              ),
+      ),
     );
   }
 }
